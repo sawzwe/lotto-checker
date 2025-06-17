@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -35,13 +35,13 @@ export default function Home() {
   const [mounted, setMounted] = useState(false);
 
   // Create validation schema with translations
-  const formSchema = z.object({
+  const formSchema = useMemo(() => z.object({
     lotteryNumber: z
       .string()
       .min(6, t.validation.exactly6Digits)
       .max(6, t.validation.exactly6Digits)
       .regex(/^\d{6}$/, t.validation.numbersOnly),
-  });
+  }), [t]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -57,7 +57,11 @@ export default function Home() {
   // Update form validation when language changes
   useEffect(() => {
     form.clearErrors();
-  }, [language, form]);
+    // Re-validate current field value with new schema
+    if (form.getValues().lotteryNumber) {
+      form.trigger();
+    }
+  }, [language, form, formSchema]);
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsLoading(true);

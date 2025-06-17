@@ -9,13 +9,14 @@ interface LanguageContextType {
   t: Translations;
 }
 
-const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
+const LanguageContext = createContext<LanguageContextType>({
+  language: 'th',
+  setLanguage: () => {},
+  t: getTranslation('th'),
+});
 
 export function useLanguage() {
   const context = useContext(LanguageContext);
-  if (context === undefined) {
-    throw new Error('useLanguage must be used within a LanguageProvider');
-  }
   return context;
 }
 
@@ -32,9 +33,6 @@ export function LanguageProvider({ children }: LanguageProviderProps) {
     const savedLanguage = localStorage.getItem('lottery-language') as Language;
     if (savedLanguage && (savedLanguage === 'th' || savedLanguage === 'en')) {
       setLanguage(savedLanguage);
-    } else {
-      // Default to Thai for Thai lottery
-      setLanguage('th');
     }
     setMounted(true);
   }, []);
@@ -53,29 +51,14 @@ export function LanguageProvider({ children }: LanguageProviderProps) {
 
   const translations = getTranslation(language);
 
-  if (!mounted) {
-    // Return a provider with default Thai translations during SSR
-    return (
-      <LanguageContext.Provider
-        value={{
-          language: 'th',
-          setLanguage: handleSetLanguage,
-          t: getTranslation('th'),
-        }}
-      >
-        {children}
-      </LanguageContext.Provider>
-    );
-  }
+  const contextValue = {
+    language,
+    setLanguage: handleSetLanguage,
+    t: translations,
+  };
 
   return (
-    <LanguageContext.Provider
-      value={{
-        language,
-        setLanguage: handleSetLanguage,
-        t: translations,
-      }}
-    >
+    <LanguageContext.Provider value={contextValue}>
       {children}
     </LanguageContext.Provider>
   );

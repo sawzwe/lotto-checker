@@ -1,65 +1,40 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Language, getTranslation, Translations } from '@/lib/translations';
+import { translations, Language, Translations } from '@/lib/translations';
 
-interface LanguageContextType {
+type LanguageContextType = {
   language: Language;
-  setLanguage: (language: Language) => void;
+  setLanguage: (lang: Language) => void;
   t: Translations;
-}
+};
 
-const LanguageContext = createContext<LanguageContextType>({
-  language: 'th',
-  setLanguage: () => {},
-  t: getTranslation('th'),
-});
+const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
-export function useLanguage() {
-  const context = useContext(LanguageContext);
-  return context;
-}
-
-interface LanguageProviderProps {
-  children: React.ReactNode;
-}
-
-export function LanguageProvider({ children }: LanguageProviderProps) {
-  const [language, setLanguage] = useState<Language>('th');
+export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
+  const [language, setLanguage] = useState<Language>('th');
+  const t = translations[language];
 
   useEffect(() => {
-    // Check for saved language preference
-    const savedLanguage = localStorage.getItem('lottery-language') as Language;
-    if (savedLanguage && (savedLanguage === 'th' || savedLanguage === 'en')) {
-      setLanguage(savedLanguage);
-    }
     setMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (mounted) {
-      localStorage.setItem('lottery-language', language);
-      // Update document language
-      document.documentElement.lang = language === 'th' ? 'th' : 'en';
-    }
-  }, [language, mounted]);
-
-  const handleSetLanguage = (newLanguage: Language) => {
-    setLanguage(newLanguage);
-  };
-
-  const translations = getTranslation(language);
-
-  const contextValue = {
-    language,
-    setLanguage: handleSetLanguage,
-    t: translations,
-  };
+  if (!mounted) {
+    return null;
+  }
 
   return (
-    <LanguageContext.Provider value={contextValue}>
+    <LanguageContext.Provider value={{ language, setLanguage, t }}>
       {children}
     </LanguageContext.Provider>
   );
+}
+
+export function useLanguage() {
+  const context = useContext(LanguageContext);
+  if (context === undefined) {
+    throw new Error('useLanguage must be used within a LanguageProvider');
+  }
+  return context;
 } 

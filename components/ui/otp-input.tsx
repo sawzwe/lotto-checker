@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 
 interface OTPInputProps {
@@ -18,18 +18,29 @@ export function OTPInput({
 }: OTPInputProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const [isMounted, setIsMounted] = useState(false);
   
   const digits = useMemo(() => (value + '      ').slice(0, 6).split(''), [value]);
 
   useEffect(() => {
-    const firstEmptyIndex = digits.findIndex(digit => digit === ' ' || digit === '');
-    if (firstEmptyIndex !== -1 && !disabled) {
-      inputRefs.current[firstEmptyIndex]?.focus();
-    }
-  }, [digits, disabled]);
+    setIsMounted(true);
+  }, []);
 
-  const handleInputChange = (index: number, inputValue: string) => {
-    if (disabled) return;
+  useEffect(() => {
+    if (!isMounted || disabled) return;
+    
+    const firstEmptyIndex = digits.findIndex(digit => digit === ' ' || digit === '');
+    if (firstEmptyIndex !== -1) {
+      // Use a small delay to ensure DOM is ready
+      const timer = setTimeout(() => {
+        inputRefs.current[firstEmptyIndex]?.focus();
+      }, 10);
+      return () => clearTimeout(timer);
+    }
+  }, [digits, disabled, isMounted]);
+
+  const handleInputChange = useCallback((index: number, inputValue: string) => {
+    if (disabled || !isMounted) return;
 
     const digit = inputValue.replace(/\D/g, '');
     
@@ -57,10 +68,10 @@ export function OTPInput({
         setTimeout(() => inputRefs.current[index + 1]?.focus(), 0);
       }
     }
-  };
+  }, [digits, onChange, disabled, isMounted ]);
 
-  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (disabled) return;
+  const handleKeyDown = useCallback((index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (disabled || !isMounted) return;
     
     if (e.key === 'Backspace') {
       e.preventDefault();
@@ -82,24 +93,36 @@ export function OTPInput({
       e.preventDefault();
       inputRefs.current[index + 1]?.focus();
     }
-  };
+  }, [digits, onChange, disabled, isMounted]);
 
-  const handleFocus = (index: number) => {
+  const handleFocus = useCallback((index: number) => {
     setActiveIndex(index);
-  };
+  }, []);
 
-  const handleBlur = () => {
+  const handleBlur = useCallback(() => {
     setActiveIndex(null);
-  };
+  }, []);
 
-  const isWinning = (index: number) => {
+  const isWinning = useCallback((index: number) => {
     return showWinning && winningPositions.includes(index);
-  };
+  }, [showWinning, winningPositions]);
+
+  if (!isMounted) {
+    return (
+      <div className="flex gap-2 justify-center items-center">
+        {Array.from({ length: 6 }).map((_, index) => (
+          <div key={index} className="relative">
+            <div className="w-12 h-14 border-2 rounded-lg border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-700 animate-pulse" />
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="flex gap-2 justify-center items-center">
       {digits.map((digit, index) => (
-        <div key={index} className="relative">
+        <div key={`input-${index}-${digit}`} className="relative">
           <input
           ref={el => { inputRefs.current[index] = el; }}
           type="text"
@@ -110,7 +133,7 @@ export function OTPInput({
           onKeyDown={(e) => handleKeyDown(index, e)}
           onFocus={() => handleFocus(index)}
           onBlur={handleBlur}
-          disabled={disabled}
+          disabled={disabled || !isMounted}
           className={cn(
             "w-12 h-14 text-center text-2xl font-mono font-bold border-2 rounded-lg",
             "focus:outline-none transition-all duration-300",

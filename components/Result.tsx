@@ -48,9 +48,16 @@ const badgeVariants = {
 export default function Result({ result, inputNumber, isVisible }: ResultProps) {
   const [showConfetti, setShowConfetti] = useState(false);
   const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
+  const [isMounted, setIsMounted] = useState(false);
   const { t } = useTranslation();
 
   useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isMounted) return;
+    
     const updateWindowSize = () => {
       setWindowSize({ width: window.innerWidth, height: window.innerHeight });
     };
@@ -58,24 +65,26 @@ export default function Result({ result, inputNumber, isVisible }: ResultProps) 
     updateWindowSize();
     window.addEventListener('resize', updateWindowSize);
     return () => window.removeEventListener('resize', updateWindowSize);
-  }, []);
+  }, [isMounted]);
 
   useEffect(() => {
+    if (!isMounted) return;
+    
     if (result && result.type !== 'none' && isVisible) {
       setShowConfetti(true);
       const timer = setTimeout(() => setShowConfetti(false), 5000);
       return () => clearTimeout(timer);
     }
-  }, [result, isVisible]);
+  }, [result, isVisible, isMounted]);
 
-  if (!result || !isVisible) return null;
+  if (!result || !isVisible || !isMounted) return null;
 
   const isWinner = result.type !== 'none';
   const Icon = prizeIcons[result.type as keyof typeof prizeIcons];
 
   return (
     <>
-      {showConfetti && (
+      {showConfetti && isMounted && windowSize.width > 0 && (
         <Confetti
           width={windowSize.width}
           height={windowSize.height}
@@ -85,18 +94,20 @@ export default function Result({ result, inputNumber, isVisible }: ResultProps) 
         />
       )}
 
-      <AnimatePresence>
-        <motion.div
-          initial={{ opacity: 0, y: 50, scale: 0.9 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -50, scale: 0.9 }}
-          transition={{ 
-            duration: 0.5, 
-            ease: "easeOut",
-            delay: 0.2 
-          }}
-          className="w-full max-w-md mx-auto"
-        >
+      <AnimatePresence mode="wait">
+        {isVisible && (
+          <motion.div
+            key={`result-${inputNumber}`}
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -50, scale: 0.9 }}
+            transition={{ 
+              duration: 0.5, 
+              ease: "easeOut",
+              delay: 0.2 
+            }}
+            className="w-full max-w-md mx-auto"
+          >
           <Card className={cn(
             "overflow-hidden border-2 shadow-lg",
             isWinner ? "border-green-500 shadow-green-200" : "border-red-500 shadow-red-200"
@@ -192,7 +203,8 @@ export default function Result({ result, inputNumber, isVisible }: ResultProps) 
               )}
             </CardContent>
           </Card>
-        </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </>
   );

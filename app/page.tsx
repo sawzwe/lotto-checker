@@ -49,6 +49,7 @@ export default function Home() {
   const { theme, setTheme } = useTheme();
   const { t, i18n } = useTranslation();
   const [mounted, setMounted] = useState(false);
+  const [isClient, setIsClient] = useState(false);
 
   // Get the selected draw
   const selectedDraw = useMemo(() => {
@@ -81,6 +82,11 @@ export default function Home() {
 
   useEffect(() => {
     setMounted(true);
+    // Add a small delay to ensure DOM is fully ready
+    const timer = setTimeout(() => {
+      setIsClient(true);
+    }, 100);
+    return () => clearTimeout(timer);
   }, []);
 
   // Update document language when i18n language changes
@@ -112,6 +118,8 @@ export default function Home() {
   }, [selectedDrawDate, mounted]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
+    if (!isClient) return; // Prevent submission before client is ready
+    
     setIsLoading(true);
     setShowResult(false);
     setResult(null);
@@ -290,14 +298,15 @@ export default function Home() {
                           <FormControl>
                             <div className="space-y-3">
                               <OTPInput
+                                key={`otp-${selectedDrawDate}-${isClient}`}
                                 value={field.value}
                                 onChange={field.onChange}
-                                disabled={isLoading}
+                                disabled={isLoading || !isClient}
                                 winningPositions={
-                                  mounted && result ? getWinningPositions(result.type) : []
+                                  isClient && mounted && result ? getWinningPositions(result.type) : []
                                 }
                                 showWinning={
-                                  mounted && showResult && result?.type !== "none"
+                                  isClient && mounted && showResult && result?.type !== "none"
                                 }
                               />
                               <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
@@ -363,8 +372,9 @@ export default function Home() {
           )}
 
           {/* Result Display */}
-          {mounted && (
+          {mounted && isClient && (
             <Result
+              key={`result-${inputNumber}-${result?.type || 'none'}`}
               result={result}
               inputNumber={inputNumber}
               isVisible={showResult}

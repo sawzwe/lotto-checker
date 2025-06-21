@@ -1,15 +1,22 @@
-'use client';
+"use client";
 
-import { useState, useEffect, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
+import { useState, useEffect, useMemo } from "react";
+import { motion } from "framer-motion";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { OTPInput } from "@/components/ui/otp-input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Form,
   FormControl,
@@ -17,42 +24,70 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form';
-import { Search, Calendar, Moon, Sun, Info, Languages } from 'lucide-react';
-import { useTheme } from 'next-themes';
-import { useLanguage } from '@/components/language-provider';
-import { checkLotteryNumber, getLotteryDrawDate, MOCK_RESULTS, LotteryResult } from '@/lib/mockData';
-import { Language } from '@/lib/translations';
-import Result from '@/components/Result';
+} from "@/components/ui/form";
+import { Search, Moon, Sun, Info, Languages } from "lucide-react";
+import { useTheme } from "next-themes";
+import { useTranslation } from "react-i18next";
+import {
+  checkLotteryNumber,
+  getCurrentDraw,
+  getAllDraws,
+  getDrawByDate,
+  formatDrawDate,
+  LotteryResult,  
+} from "@/lib/mockData";
+import Result from "@/components/Result";
+import "@/lib/i18n";
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<LotteryResult | null>(null);
   const [showResult, setShowResult] = useState(false);
-  const [inputNumber, setInputNumber] = useState('');
+  const [inputNumber, setInputNumber] = useState("");
+  const [selectedDrawDate, setSelectedDrawDate] = useState<string>("latest");
+  const [showWinningNumbers, setShowWinningNumbers] = useState(false);
   const { theme, setTheme } = useTheme();
-  const { language, setLanguage, t } = useLanguage();
+  const { t, i18n } = useTranslation();
   const [mounted, setMounted] = useState(false);
 
+  // Get the selected draw
+  const selectedDraw = useMemo(() => {
+    if (selectedDrawDate === "latest") {
+      return getCurrentDraw();
+    }
+    return getDrawByDate(selectedDrawDate) || getCurrentDraw();
+  }, [selectedDrawDate]);
+
   // Create validation schema with translations
-  const formSchema = useMemo(() => z.object({
-    lotteryNumber: z
-      .string()
-      .min(6, t.validation.exactly6Digits)
-      .max(6, t.validation.exactly6Digits)
-      .regex(/^\d{6}$/, t.validation.numbersOnly),
-  }), [t]);
+  const formSchema = useMemo(
+    () =>
+      z.object({
+        lotteryNumber: z
+          .string()
+          .min(6, t("validation.exactly6Digits"))
+          .max(6, t("validation.exactly6Digits"))
+          .regex(/^\d{6}$/, t("validation.numbersOnly")),
+      }),
+    [t]
+  );
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      lotteryNumber: '',
+      lotteryNumber: "",
     },
   });
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Update document language when i18n language changes
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.lang = i18n.language;
+    }
+  }, [i18n.language]);
 
   // Update form validation when language changes
   useEffect(() => {
@@ -61,7 +96,18 @@ export default function Home() {
     if (form.getValues().lotteryNumber) {
       form.trigger();
     }
-  }, [language, form, formSchema]);
+  }, [i18n.language, form, formSchema]);
+
+  // Clear results when draw changes
+  useEffect(() => {
+    if (showResult) {
+      setShowResult(false);
+      setResult(null);
+      setInputNumber("");
+    }
+    // Also hide winning numbers when changing draws to prevent spoilers
+    setShowWinningNumbers(false);
+  }, [selectedDrawDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsLoading(true);
@@ -72,11 +118,15 @@ export default function Home() {
     // Simulate loading for 1 second
     setTimeout(() => {
       try {
-        const checkResult = checkLotteryNumber(values.lotteryNumber, language);
+        const checkResult = checkLotteryNumber(
+          values.lotteryNumber,
+          t,
+          selectedDraw
+        );
         setResult(checkResult);
         setShowResult(true);
       } catch (error) {
-        console.error('Error checking lottery:', error);
+        console.error("Error checking lottery:", error);
       } finally {
         setIsLoading(false);
       }
@@ -86,13 +136,34 @@ export default function Home() {
   const handleNewCheck = () => {
     setShowResult(false);
     setResult(null);
-    setInputNumber('');
+    setInputNumber("");
     form.reset();
   };
 
   const toggleLanguage = () => {
-    const newLanguage: Language = language === 'th' ? 'en' : 'th';
-    setLanguage(newLanguage);
+    const newLanguage = i18n.language === "th" ? "en" : "th";
+    i18n.changeLanguage(newLanguage);
+  };
+
+  // Function to determine which positions should be highlighted based on prize type
+  const getWinningPositions = (prizeType: string): number[] => {
+    switch (prizeType) {
+      case "first":
+      case "adjacent":
+      case "second":
+      case "third":
+      case "fourth":
+      case "fifth":
+        return [0, 1, 2, 3, 4, 5]; // All 6 digits
+      case "front3":
+        return [0, 1, 2]; // First 3 digits
+      case "back3":
+        return [3, 4, 5]; // Last 3 digits
+      case "last2":
+        return [4, 5]; // Last 2 digits
+      default:
+        return []; // No highlighting for no prize
+    }
   };
 
   if (!mounted) {
@@ -121,31 +192,59 @@ export default function Home() {
                 size="icon"
                 onClick={toggleLanguage}
                 className="rounded-full"
-                title={language === 'th' ? 'Switch to English' : 'เปลี่ยนเป็นภาษาไทย'}
+                title={
+                  i18n.language === "th"
+                    ? "Switch to English"
+                    : "เปลี่ยนเป็นภาษาไทย"
+                }
               >
                 <Languages className="h-4 w-4" />
               </Button>
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
                 className="rounded-full"
               >
-                {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                {theme === "dark" ? (
+                  <Sun className="h-4 w-4" />
+                ) : (
+                  <Moon className="h-4 w-4" />
+                )}
               </Button>
             </div>
           </div>
 
           <h1 className="text-4xl md:text-5xl font-bold text-gray-800 dark:text-white mb-4">
-            {t.title}
+            {t("title")}
           </h1>
           <p className="text-lg text-gray-600 dark:text-gray-300 mb-2">
-            {t.subtitle}
+            {formatDrawDate(selectedDraw.date, i18n.language)}
           </p>
-          
-          <div className="flex justify-center items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
-            <Calendar className="h-4 w-4" />
-            <span>{t.drawDate} {getLotteryDrawDate(language)}</span>
+
+          <div className="flex flex-col items-center gap-3">
+            {/* Date Selection */}
+            <div className="w-full max-w-xs">
+              <Select
+                value={selectedDrawDate}
+                onValueChange={setSelectedDrawDate}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={t("ui.selectDate")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="latest">
+                    📅 {t("ui.latest")} -{" "}
+                    {formatDrawDate(getCurrentDraw().date, i18n.language)}
+                  </SelectItem>
+                  {getAllDraws().map((draw) => (
+                    <SelectItem key={draw.date} value={draw.date}>
+                      📅 {formatDrawDate(draw.date, i18n.language)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </motion.div>
 
@@ -160,32 +259,40 @@ export default function Home() {
             <Card className="max-w-md mx-auto shadow-lg border-2 border-blue-200 dark:border-gray-700">
               <CardHeader className="text-center bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-t-lg">
                 <CardTitle className="text-xl font-semibold">
-                  {t.formTitle}
+                  {t("formTitle")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-6">
                 <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                  <form
+                    onSubmit={form.handleSubmit(onSubmit)}
+                    className="space-y-6"
+                  >
                     <FormField
                       control={form.control}
                       name="lotteryNumber"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                            {t.numberLabel}
+                            {t("numberLabel")}
                           </FormLabel>
                           <FormControl>
-                            <Input
-                              {...field}
-                              placeholder={t.numberPlaceholder}
-                              className="text-center text-2xl font-mono tracking-wider h-14 border-2 focus:border-blue-500"
-                              maxLength={6}
-                              disabled={isLoading}
-                              onChange={(e) => {
-                                const value = e.target.value.replace(/\D/g, '');
-                                field.onChange(value);
-                              }}
-                            />
+                            <div className="space-y-3">
+                              <OTPInput
+                                value={field.value}
+                                onChange={field.onChange}
+                                disabled={isLoading}
+                                winningPositions={
+                                  result ? getWinningPositions(result.type) : []
+                                }
+                                showWinning={
+                                  showResult && result?.type !== "none"
+                                }
+                              />
+                              <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
+                                {t("numberPlaceholder")}
+                              </p>
+                            </div>
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -201,12 +308,12 @@ export default function Home() {
                         {isLoading ? (
                           <div className="flex items-center gap-2">
                             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
-                            {t.checkingButton}
+                            {t("checkingButton")}
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">
                             <Search className="h-5 w-5" />
-                            {t.checkButton}
+                            {t("checkButton")}
                           </div>
                         )}
                       </Button>
@@ -217,7 +324,7 @@ export default function Home() {
                           variant="outline"
                           className="w-full h-12 text-lg font-semibold"
                         >
-                          {t.newCheckButton}
+                          {t("newCheckButton")}
                         </Button>
                       )}
                     </div>
@@ -245,7 +352,11 @@ export default function Home() {
           )}
 
           {/* Result Display */}
-          <Result result={result} inputNumber={inputNumber} isVisible={showResult} />
+          <Result
+            result={result}
+            inputNumber={inputNumber}
+            isVisible={showResult}
+          />
 
           {/* Mock Data Display */}
           <motion.div
@@ -256,68 +367,132 @@ export default function Home() {
           >
             <Card className="border-blue-200 dark:border-gray-700">
               <CardHeader className="bg-gradient-to-r from-gray-100 to-gray-200 dark:from-gray-800 dark:to-gray-700 rounded-t-lg">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Info className="h-5 w-5" />
-                  {t.ui.winningNumbers}
+                <CardTitle className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-lg">
+                    <Info className="h-5 w-5" />
+                    {t("ui.winningNumbers")}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowWinningNumbers(!showWinningNumbers)}
+                    className="text-sm"
+                  >
+                    {showWinningNumbers ? t("ui.hideWinningNumbers") : t("ui.showWinningNumbers")}
+                  </Button>
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                {showWinningNumbers ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
                   <div className="space-y-2">
-                    <h4 className="font-semibold text-yellow-600 dark:text-yellow-400">{t.categories.firstPrize}</h4>
+                    <h4 className="font-semibold text-yellow-600 dark:text-yellow-400">
+                      {t("categories.firstPrize")}
+                    </h4>
                     <div className="space-y-1">
-                      {MOCK_RESULTS.firstPrize.map((num, idx) => (
-                        <Badge key={idx} variant="default" className="font-mono">
-                          {num}
-                        </Badge>
-                      ))}
+                      {selectedDraw.firstPrize.map(
+                        (num: string, idx: number) => (
+                          <Badge
+                            key={idx}
+                            variant="default"
+                            className="font-mono"
+                          >
+                            {num}
+                          </Badge>
+                        )
+                      )}
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <h4 className="font-semibold text-gray-600 dark:text-gray-400">{t.categories.secondPrize}</h4>
+                    <h4 className="font-semibold text-gray-600 dark:text-gray-400">
+                      {t("categories.secondPrize")}
+                    </h4>
                     <div className="space-y-1">
-                      {MOCK_RESULTS.secondPrize.map((num, idx) => (
-                        <Badge key={idx} variant="secondary" className="font-mono">
-                          {num}
-                        </Badge>
-                      ))}
+                      {selectedDraw.secondPrize.map(
+                        (num: string, idx: number) => (
+                          <Badge
+                            key={idx}
+                            variant="secondary"
+                            className="font-mono"
+                          >
+                            {num}
+                          </Badge>
+                        )
+                      )}
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <h4 className="font-semibold text-green-600 dark:text-green-400">{t.categories.frontThree}</h4>
+                    <h4 className="font-semibold text-green-600 dark:text-green-400">
+                      {t("categories.frontThree")}
+                    </h4>
                     <div className="space-y-1">
-                      {MOCK_RESULTS.frontThreeDigits.map((num, idx) => (
-                        <Badge key={idx} variant="outline" className="font-mono">
-                          {num}
-                        </Badge>
-                      ))}
+                      {selectedDraw.frontThreeDigits.map(
+                        (num: string, idx: number) => (
+                          <Badge
+                            key={idx}
+                            variant="outline"
+                            className="font-mono"
+                          >
+                            {num}
+                          </Badge>
+                        )
+                      )}
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <h4 className="font-semibold text-blue-600 dark:text-blue-400">{t.categories.backThree}</h4>
+                    <h4 className="font-semibold text-blue-600 dark:text-blue-400">
+                      {t("categories.backThree")}
+                    </h4>
                     <div className="space-y-1">
-                      {MOCK_RESULTS.backThreeDigits.map((num, idx) => (
-                        <Badge key={idx} variant="outline" className="font-mono">
-                          {num}
-                        </Badge>
-                      ))}
+                      {selectedDraw.backThreeDigits.map(
+                        (num: string, idx: number) => (
+                          <Badge
+                            key={idx}
+                            variant="outline"
+                            className="font-mono"
+                          >
+                            {num}
+                          </Badge>
+                        )
+                      )}
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <h4 className="font-semibold text-purple-600 dark:text-purple-400">{t.categories.lastTwo}</h4>
+                    <h4 className="font-semibold text-purple-600 dark:text-purple-400">
+                      {t("categories.lastTwo")}
+                    </h4>
                     <div className="space-y-1">
-                      {MOCK_RESULTS.lastTwoDigits.map((num, idx) => (
-                        <Badge key={idx} variant="outline" className="font-mono">
-                          {num}
-                        </Badge>
-                      ))}
+                      {selectedDraw.lastTwoDigits.map(
+                        (num: string, idx: number) => (
+                          <Badge
+                            key={idx}
+                            variant="outline"
+                            className="font-mono"
+                          >
+                            {num}
+                          </Badge>
+                        )
+                      )}
                     </div>
                   </div>
-                </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="text-6xl mb-4">🔒</div>
+                    <p className="text-gray-500 dark:text-gray-400 text-lg mb-2">
+                      {t("ui.winningNumbers")}
+                    </p>
+                    <p className="text-gray-400 dark:text-gray-500 text-sm">
+                      {i18n.language === "th" 
+                        ? "คลิกปุ่มด้านบนเพื่อแสดงเลขที่ออกรางวัล" 
+                        : "Click the button above to reveal winning numbers"}
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </motion.div>
@@ -331,7 +506,7 @@ export default function Home() {
           >
             <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-8 text-center">
               <p className="text-gray-500 dark:text-gray-400 text-sm">
-                {t.ui.adPlaceholder}
+                {t("ui.adPlaceholder")}
               </p>
             </div>
           </motion.div>

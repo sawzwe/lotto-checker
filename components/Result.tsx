@@ -8,8 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Trophy, Star, DollarSign, X } from 'lucide-react';
 import { LotteryResult } from '@/lib/mockData';
-import { useLanguage } from '@/components/language-provider';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
+import '@/lib/i18n';
 
 interface ResultProps {
   result: LotteryResult | null;
@@ -47,7 +48,7 @@ const badgeVariants = {
 export default function Result({ result, inputNumber, isVisible }: ResultProps) {
   const [showConfetti, setShowConfetti] = useState(false);
   const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
-  const { t } = useLanguage();
+  const { t } = useTranslation();
 
   useEffect(() => {
     const updateWindowSize = () => {
@@ -70,7 +71,7 @@ export default function Result({ result, inputNumber, isVisible }: ResultProps) 
   if (!result || !isVisible) return null;
 
   const isWinner = result.type !== 'none';
-  const Icon = prizeIcons[result.type];
+  const Icon = prizeIcons[result.type as keyof typeof prizeIcons];
 
   return (
     <>
@@ -102,7 +103,7 @@ export default function Result({ result, inputNumber, isVisible }: ResultProps) 
           )}>
             <CardHeader className={cn(
               "text-center text-white",
-              prizeColors[result.type]
+              prizeColors[result.type as keyof typeof prizeColors]
             )}>
               <motion.div
                 initial={{ scale: 0 }}
@@ -114,7 +115,7 @@ export default function Result({ result, inputNumber, isVisible }: ResultProps) 
               </motion.div>
               
               <CardTitle className="text-xl font-bold">
-                {t.ui.numberPrefix} {inputNumber}
+                {t('ui.numberPrefix')} {inputNumber}
               </CardTitle>
               
               <motion.div
@@ -123,7 +124,7 @@ export default function Result({ result, inputNumber, isVisible }: ResultProps) 
                 transition={{ delay: 0.7 }}
               >
                 <Badge 
-                  variant={badgeVariants[result.type]}
+                  variant={badgeVariants[result.type as keyof typeof badgeVariants]}
                   className="text-sm font-medium px-4 py-1"
                 >
                   {result.prize}
@@ -153,7 +154,7 @@ export default function Result({ result, inputNumber, isVisible }: ResultProps) 
                 transition={{ delay: 1.1 }}
                 className="text-center space-y-2"
               >
-                <div className="text-sm text-gray-600">{t.ui.prizeAmount}</div>
+                <div className="text-sm text-gray-600">{t('ui.prizeAmount')}</div>
                 <div className={cn(
                   "text-3xl font-bold",
                   isWinner ? "text-green-600" : "text-red-600"
@@ -171,7 +172,7 @@ export default function Result({ result, inputNumber, isVisible }: ResultProps) 
                 >
                   <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-100 rounded-full text-green-800 text-sm font-medium">
                     <Trophy className="h-4 w-4" />
-                    {t.ui.winner}
+                    {t('ui.winner')}
                   </div>
                 </motion.div>
               )}
@@ -185,7 +186,7 @@ export default function Result({ result, inputNumber, isVisible }: ResultProps) 
                 >
                   <div className="inline-flex items-center gap-2 px-4 py-2 bg-red-100 rounded-full text-red-800 text-sm font-medium">
                     <X className="h-4 w-4" />
-                    {t.ui.tryAgain}
+                    {t('ui.tryAgain')}
                   </div>
                 </motion.div>
               )}

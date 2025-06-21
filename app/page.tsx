@@ -52,11 +52,12 @@ export default function Home() {
 
   // Get the selected draw
   const selectedDraw = useMemo(() => {
+    if (!mounted) return getCurrentDraw(); // Always return current draw during SSR
     if (selectedDrawDate === "latest") {
       return getCurrentDraw();
     }
     return getDrawByDate(selectedDrawDate) || getCurrentDraw();
-  }, [selectedDrawDate]);
+  }, [selectedDrawDate, mounted]);
 
   // Create validation schema with translations
   const formSchema = useMemo(
@@ -84,22 +85,23 @@ export default function Home() {
 
   // Update document language when i18n language changes
   useEffect(() => {
-    if (typeof document !== "undefined") {
-      document.documentElement.lang = i18n.language;
-    }
-  }, [i18n.language]);
+    if (!mounted || typeof document === "undefined") return; // Prevent SSR issues
+    document.documentElement.lang = i18n.language;
+  }, [i18n.language, mounted]);
 
   // Update form validation when language changes
   useEffect(() => {
+    if (!mounted) return; // Prevent running during SSR
     form.clearErrors();
     // Re-validate current field value with new schema
     if (form.getValues().lotteryNumber) {
       form.trigger();
     }
-  }, [i18n.language, form, formSchema]);
+  }, [i18n.language, form, formSchema, mounted]);
 
   // Clear results when draw changes
   useEffect(() => {
+    if (!mounted) return; // Prevent running during SSR
     if (showResult) {
       setShowResult(false);
       setResult(null);
@@ -107,7 +109,7 @@ export default function Home() {
     }
     // Also hide winning numbers when changing draws to prevent spoilers
     setShowWinningNumbers(false);
-  }, [selectedDrawDate]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedDrawDate, mounted]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsLoading(true);
@@ -166,17 +168,26 @@ export default function Home() {
     }
   };
 
+  // Prevent hydration issues by showing a consistent loading state
   if (!mounted) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
-        <Skeleton className="w-96 h-64" />
+        <div className="container mx-auto max-w-4xl px-4">
+          <div className="text-center mb-8">
+            <Skeleton className="h-12 w-80 mx-auto mb-4" />
+            <Skeleton className="h-6 w-64 mx-auto mb-6" />
+          </div>
+          <div className="max-w-md mx-auto">
+            <Skeleton className="w-full h-64" />
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 py-8 px-4">
-      <div className="container mx-auto max-w-4xl">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 py-8 px-4" suppressHydrationWarning>
+      <div className="container mx-auto max-w-4xl" key={mounted ? 'mounted' : 'loading'}>
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -283,10 +294,10 @@ export default function Home() {
                                 onChange={field.onChange}
                                 disabled={isLoading}
                                 winningPositions={
-                                  result ? getWinningPositions(result.type) : []
+                                  mounted && result ? getWinningPositions(result.type) : []
                                 }
                                 showWinning={
-                                  showResult && result?.type !== "none"
+                                  mounted && showResult && result?.type !== "none"
                                 }
                               />
                               <p className="text-xs text-gray-500 dark:text-gray-400 text-center">
@@ -352,11 +363,13 @@ export default function Home() {
           )}
 
           {/* Result Display */}
-          <Result
-            result={result}
-            inputNumber={inputNumber}
-            isVisible={showResult}
-          />
+          {mounted && (
+            <Result
+              result={result}
+              inputNumber={inputNumber}
+              isVisible={showResult}
+            />
+          )}
 
           {/* Mock Data Display */}
           <motion.div
